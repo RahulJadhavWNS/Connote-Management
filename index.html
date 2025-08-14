@@ -169,7 +169,7 @@
                                 <th class="text-gray-700 font-semibold">User Name</th>
                                 <th class="text-gray-700 font-semibold">Billed Count</th>
                                 <th class="text-gray-700 font-semibold">Unbilled Count</th>
-                                <th class="text-gray-700 font-semibold">Email Count</th>
+                                <th class="text-gray-700 font-semibold">Emailed Count</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -316,9 +316,9 @@
                                 <td>
                                     <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
                                         <option value="" ${status === '' ? 'selected' : ''}></option>
-                                        <option value="email" ${status === 'email' ? 'selected' : ''}>email</option>
-                                        <option value="billed" ${status === 'billed' ? 'selected' : ''}>billed</option>
-                                        <option value="unbilled" ${status === 'unbilled' ? 'selected' : ''}>unbilled</option>
+                                        <option value="Emailed" ${status === 'Emailed' ? 'selected' : ''}>Emailed</option>
+                                        <option value="Billed" ${status === 'Billed' ? 'selected' : ''}>Billed</option>
+                                        <option value="Unbilled" ${status === 'Unbilled' ? 'selected' : ''}>Unbilled</option>
                                     </select>
                                 </td>
                                 <td><input type="text" placeholder="Add comment" value="${comment}" oninput="updateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
@@ -399,9 +399,9 @@
                         <td>
                             <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
                                 <option value="" ${status === '' ? 'selected' : ''}></option>
-                                <option value="email" ${status === 'email' ? 'selected' : ''}>email</option>
-                                <option value="billed" ${status === 'billed' ? 'selected' : ''}>billed</option>
-                                <option value="unbilled" ${status === 'unbilled' ? 'selected' : ''}>unbilled</option>
+                                <option value="Emailed" ${status === 'Emailed' ? 'selected' : ''}>Emailed</option>
+                                <option value="Billed" ${status === 'Billed' ? 'selected' : ''}>Billed</option>
+                                <option value="Unbilled" ${status === 'Unbilled' ? 'selected' : ''}>Unbilled</option>
                             </select>
                         </td>
                         <td><input type="text" placeholder="Add comment" value="${comment}" oninput="updateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
@@ -481,14 +481,14 @@
 
             const userCounts = {};
             Array.from(uniqueUsers).sort().forEach(user => {
-                userCounts[user] = { billed: 0, unbilled: 0, email: 0 };
+                userCounts[user] = { Billed: 0, Unbilled: 0, Emailed: 0 };
             });
 
             billedData.forEach(item => {
                 if (item.userName && userCounts[item.userName]) {
-                    if (item.status === 'billed') userCounts[item.userName].billed++;
-                    else if (item.status === 'unbilled') userCounts[item.userName].unbilled++;
-                    else if (item.status === 'email') userCounts[item.userName].email++;
+                    if (item.status === 'Billed') userCounts[item.userName].Billed++;
+                    else if (item.status === 'Unbilled') userCounts[item.userName].Unbilled++;
+                    else if (item.status === 'Emailed') userCounts[item.userName].Emailed++;
                 }
             });
 
@@ -496,9 +496,9 @@
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${user}</td>
-                    <td>${userCounts[user].billed}</td>
-                    <td>${userCounts[user].unbilled}</td>
-                    <td>${userCounts[user].email}</td>
+                    <td>${userCounts[user].Billed}</td>
+                    <td>${userCounts[user].Unbilled}</td>
+                    <td>${userCounts[user].Emailed}</td>
                 `;
                 dashboardBody.appendChild(tr);
             });
