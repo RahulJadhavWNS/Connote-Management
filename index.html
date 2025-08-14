@@ -132,15 +132,15 @@
             </table>
         </div>
 
-        <h2 class="text-2xl font-semibold text-gray-800 mb-4">Billed Items</h2>
+        <h2 class="text-2xl font-semibold text-gray-800 mb-4"> Items</h2>
         <div class="flex space-x-4 mb-4">
-            <button onclick="exportBilledData()" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md">Export Billed Data to Excel</button>
+            <button onclick="exportData()" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md">Export  Data to Excel</button>
             <button onclick="showDashboard()" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-md">Show User Dashboard</button>
             <button onclick="clearSavedData()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md">Clear Saved Data</button>
         </div>
         <div id="exportMessage" class="hidden text-green-600 mb-4"></div>
         <div class="table-container bg-white shadow-md rounded-lg overflow-hidden">
-            <table id="billedTable" class="table w-full">
+            <table id="Table" class="table w-full">
                 <thead class="bg-gray-200">
                     <tr>
                         <th class="text-gray-700 font-semibold">Process Date</th>
@@ -167,8 +167,8 @@
                         <thead class="bg-gray-200">
                             <tr>
                                 <th class="text-gray-700 font-semibold">User Name</th>
-                                <th class="text-gray-700 font-semibold">Billed Count</th>
-                                <th class="text-gray-700 font-semibold">Unbilled Count</th>
+                                <th class="text-gray-700 font-semibold"> Count</th>
+                                <th class="text-gray-700 font-semibold">UnBilled Count</th>
                                 <th class="text-gray-700 font-semibold">Emailed Count</th>
                             </tr>
                         </thead>
@@ -185,15 +185,15 @@
         let data = [];
         let uniqueUsers = new Set();
         let uniqueDates = new Set();
-        let billedData = [];
+        let BilledData = [];
 
-        // Load saved billedData from localStorage on page load
+        // Load saved BilledData from localStorage on page load
         function loadSavedData() {
-            const savedData = localStorage.getItem('billedData');
+            const savedData = localStorage.getItem('BilledData');
             if (savedData) {
                 try {
-                    billedData = JSON.parse(savedData);
-                    console.log('Loaded billedData from localStorage:', billedData);
+                    BilledData = JSON.parse(savedData);
+                    console.log('Loaded BilledData from localStorage:', BilledData);
                     updateBilledTable();
                 } catch (error) {
                     console.error('Failed to parse localStorage data:', error);
@@ -201,13 +201,13 @@
             }
         }
 
-        // Save billedData to localStorage
+        // Save BilledData to localStorage
         function saveBilledData() {
             try {
-                localStorage.setItem('billedData', JSON.stringify(billedData));
-                console.log('Saved billedData to localStorage:', billedData);
+                localStorage.setItem('BilledData', JSON.stringify(BilledData));
+                console.log('Saved BilledData to localStorage:', BilledData);
             } catch (error) {
-                console.error('Failed to save billedData to localStorage:', error);
+                console.error('Failed to save BilledData to localStorage:', error);
                 alert('Error saving data to localStorage. Storage may be full.');
             }
         }
@@ -215,8 +215,8 @@
         // Clear saved data from localStorage
         function clearSavedData() {
             if (confirm('Are you sure you want to clear all saved status and comment data? This cannot be undone.')) {
-                localStorage.removeItem('billedData');
-                billedData = [];
+                localStorage.removeItem('BilledData');
+                BilledData = [];
                 updateBilledTable();
                 alert('Saved data cleared successfully.');
             }
@@ -274,8 +274,8 @@
                     const tableBody = document.getElementById('connoteTable').querySelector('tbody');
                     tableBody.innerHTML = '';
 
-                    const previousBilledData = billedData;
-                    billedData = [];
+                    const previousBilledData = BilledData;
+                    BilledData = [];
 
                     data.forEach((row, index) => {
                         if (row.length >= 6) {
@@ -299,10 +299,10 @@
                             const comment = previousEntry ? previousEntry.comment : '';
 
                             if (status) {
-                                billedData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
+                                BilledData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
                             }
 
-                            if (status === 'billed') return;
+                            if (status === 'Billed') return;
 
                             const tr = document.createElement('tr');
                             tr.dataset.rowId = rowId;
@@ -318,7 +318,7 @@
                                         <option value="" ${status === '' ? 'selected' : ''}></option>
                                         <option value="Emailed" ${status === 'Emailed' ? 'selected' : ''}>Emailed</option>
                                         <option value="Billed" ${status === 'Billed' ? 'selected' : ''}>Billed</option>
-                                        <option value="Unbilled" ${status === 'Unbilled' ? 'selected' : ''}>Unbilled</option>
+                                        <option value="UnBilled" ${status === 'UnBilled' ? 'selected' : ''}>UnBilled</option>
                                     </select>
                                 </td>
                                 <td><input type="text" placeholder="Add comment" value="${comment}" oninput="updateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
@@ -370,23 +370,23 @@
             const row = selectElement.closest('tr');
             const comment = row.querySelector('input').value || '';
 
-            const existingIndex = billedData.findIndex(item => item.rowId === rowId);
+            const existingIndex = BilledData.findIndex(item => item.rowId === rowId);
             if (status) {
                 if (existingIndex === -1) {
-                    billedData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
+                    BilledData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
                 } else {
-                    billedData[existingIndex] = { processDate, userName, service, connote, errorCode, batchId, status, comment, rowId };
+                    BilledData[existingIndex] = { processDate, userName, service, connote, errorCode, batchId, status, comment, rowId };
                 }
             } else {
-                billedData = billedData.filter(item => item.rowId !== rowId);
+                BilledData = BilledData.filter(item => item.rowId !== rowId);
             }
 
-            if (status === 'billed') {
+            if (status === 'Billed') {
                 row.remove();
             } else if (existingIndex !== -1) {
                 const tableBody = document.getElementById('connoteTable').querySelector('tbody');
                 const existingRow = Array.from(tableBody.querySelectorAll('tr')).find(r => r.dataset.rowId === rowId);
-                if (!existingRow && billedData[existingIndex].status !== 'billed') {
+                if (!existingRow && BilledData[existingIndex].status !== 'Billed') {
                     const tr = document.createElement('tr');
                     tr.dataset.rowId = rowId;
                     tr.innerHTML = `
@@ -401,7 +401,7 @@
                                 <option value="" ${status === '' ? 'selected' : ''}></option>
                                 <option value="Emailed" ${status === 'Emailed' ? 'selected' : ''}>Emailed</option>
                                 <option value="Billed" ${status === 'Billed' ? 'selected' : ''}>Billed</option>
-                                <option value="Unbilled" ${status === 'Unbilled' ? 'selected' : ''}>Unbilled</option>
+                                <option value="UnBilled" ${status === 'UnBilled' ? 'selected' : ''}>UnBilled</option>
                             </select>
                         </td>
                         <td><input type="text" placeholder="Add comment" value="${comment}" oninput="updateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
@@ -425,23 +425,23 @@
             const errorCode = inputElement.closest('tr').querySelector('td:nth-child(5)').textContent;
             const batchId = inputElement.closest('tr').querySelector('td:nth-child(6)').textContent;
 
-            const existingIndex = billedData.findIndex(item => item.rowId === rowId);
+            const existingIndex = BilledData.findIndex(item => item.rowId === rowId);
             if (existingIndex !== -1) {
-                billedData[existingIndex].comment = comment;
+                BilledData[existingIndex].comment = comment;
                 updateBilledTable();
                 saveBilledData();
             } else if (status) {
-                billedData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
+                BilledData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
                 updateBilledTable();
                 saveBilledData();
             }
         }
 
         function updateBilledTable() {
-            const billedBody = document.getElementById('billedTable').querySelector('tbody');
-            billedBody.innerHTML = '';
+            const BilledBody = document.getElementById('BilledTable').querySelector('tbody');
+            BilledBody.innerHTML = '';
 
-            billedData.forEach(item => {
+            BilledData.forEach(item => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${item.processDate}</td>
@@ -453,7 +453,7 @@
                     <td>${item.status}</td>
                     <td>${item.comment}</td>
                 `;
-                billedBody.appendChild(tr);
+                BilledBody.appendChild(tr);
             });
         }
 
@@ -481,13 +481,13 @@
 
             const userCounts = {};
             Array.from(uniqueUsers).sort().forEach(user => {
-                userCounts[user] = { Billed: 0, Unbilled: 0, Emailed: 0 };
+                userCounts[user] = { Billed: 0, UnBilled: 0, Emailed: 0 };
             });
 
-            billedData.forEach(item => {
+            BilledData.forEach(item => {
                 if (item.userName && userCounts[item.userName]) {
                     if (item.status === 'Billed') userCounts[item.userName].Billed++;
-                    else if (item.status === 'Unbilled') userCounts[item.userName].Unbilled++;
+                    else if (item.status === 'UnBilled') userCounts[item.userName].UnBilled++;
                     else if (item.status === 'Emailed') userCounts[item.userName].Emailed++;
                 }
             });
@@ -497,7 +497,7 @@
                 tr.innerHTML = `
                     <td>${user}</td>
                     <td>${userCounts[user].Billed}</td>
-                    <td>${userCounts[user].Unbilled}</td>
+                    <td>${userCounts[user].UnBilled}</td>
                     <td>${userCounts[user].Emailed}</td>
                 `;
                 dashboardBody.appendChild(tr);
@@ -515,8 +515,8 @@
             const exportMessage = document.getElementById('exportMessage');
             exportMessage.classList.add('hidden');
 
-            if (!billedData || billedData.length === 0) {
-                exportMessage.textContent = 'No billed data to export. Please set statuses for some rows.';
+            if (!BilledData || BilledData.length === 0) {
+                exportMessage.textContent = 'No Billed data to export. Please set statuses for some rows.';
                 exportMessage.classList.add('text-red-600');
                 exportMessage.classList.remove('hidden');
                 setTimeout(() => {
@@ -527,12 +527,12 @@
             }
 
             try {
-                console.log('Exporting billedData:', billedData);
+                console.log('Exporting BilledData:', BilledData);
 
-                const billedDataExport = [['Process Date', 'User Name', 'Service', 'Connote', 'Error code', 'Batch Id', 'Status', 'Comments']];
-                billedData.forEach(item => {
+                const BilledDataExport = [['Process Date', 'User Name', 'Service', 'Connote', 'Error code', 'Batch Id', 'Status', 'Comments']];
+                BilledData.forEach(item => {
                     if (item && typeof item === 'object') {
-                        billedDataExport.push([
+                        BilledDataExport.push([
                             item.processDate || '',
                             item.userName || '',
                             item.service || '',
@@ -543,14 +543,14 @@
                             item.comment || ''
                         ]);
                     } else {
-                        console.warn('Invalid billedData item:', item);
+                        console.warn('Invalid BilledData item:', item);
                     }
                 });
 
-                console.log('Prepared export data:', billedDataExport);
+                console.log('Prepared export data:', BilledDataExport);
 
                 const wb = XLSX.utils.book_new();
-                const ws = XLSX.utils.aoa_to_sheet(billedDataExport);
+                const ws = XLSX.utils.aoa_to_sheet(BilledDataExport);
                 XLSX.utils.book_append_sheet(wb, ws, 'BilledItems');
 
                 const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
