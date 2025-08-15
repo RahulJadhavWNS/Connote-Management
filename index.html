@@ -190,13 +190,30 @@
         let uniqueDates = new Set();
         let billedData = [];
 
-        // Load saved data from localStorage
-        function loadSavedData() {
+        // Load saved data from localStorage or default app.xlsx
+        async function loadSavedData() {
             try {
                 const savedData = localStorage.getItem('uploadedData');
                 if (savedData) {
                     data = JSON.parse(savedData).map(row => row.map(String));
                     console.log('Loaded uploadedData from localStorage:', data);
+                } else {
+                    // Load default app.xlsx from repository
+                    try {
+                        const response = await fetch('/app.xlsx');
+                        if (!response.ok) throw new Error('Failed to fetch default app.xlsx');
+                        const arrayBuffer = await response.arrayBuffer();
+                        const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false, raw: true });
+                        const sheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[sheetName];
+                        data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+                        if (data.length > 0) data.shift(); // Remove header row
+                        data = data.map(row => row.map(String));
+                        console.log('Loaded default app.xlsx:', data);
+                        saveData();
+                    } catch (error) {
+                        console.warn('No default app.xlsx found or failed to load:', error);
+                    }
                 }
 
                 const savedBilledData = localStorage.getItem('billedData');
@@ -220,8 +237,8 @@
                 }
                 console.log('Billed Items table remains hidden on load');
             } catch (error) {
-                console.error('Error loading saved data from localStorage:', error);
-                document.getElementById('errorMessage').textContent = 'Error loading saved data. Please try again.';
+                console.error('Error loading saved data:', error);
+                document.getElementById('errorMessage').textContent = 'Error loading saved data. Please try uploading a file.';
                 document.getElementById('errorMessage').classList.remove('hidden');
             }
         }
@@ -270,6 +287,8 @@
                     document.getElementById('hideBilledTable').classList.add('hidden');
                     console.log('Billed Items table hidden after clear');
                     alert('All saved data cleared successfully.');
+                    // Reload default app.xlsx after clear
+                    loadSavedData();
                 } catch (error) {
                     console.error('Error clearing saved data:', error);
                     document.getElementById('errorMessage').textContent = 'Error clearing saved data. Please try again.';
@@ -400,113 +419,119 @@
             };
         }
 
-        // Load Excel file data
-        function loadData() {
-            const fileInput = document.getElementById('uploadExcel');
+        // Load Excel file data (manual upload or default)
+        async function loadData(file = null) {
             const errorMessage = document.getElementById('errorMessage');
             const loadingMessage = document.getElementById('loadingMessage');
-            const file = fileInput.files[0];
-
-            if (!file) {
-                alert('Please select a file.');
-                return;
-            }
 
             loadingMessage.classList.remove('hidden');
             errorMessage.classList.add('hidden');
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const arrayBuffer = e.target.result;
-                    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false, raw: true });
-                    const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
-                    data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
-
-                    if (data.length > 0) data.shift(); // Remove header row
-
-                    // Convert all data to strings to prevent type mismatches
-                    data = data.map(row => row.map(String));
-
-                    // Save uploaded data to localStorage
-                    saveData();
-
-                    // Preserve Emailed and Doubtful statuses/comments from previous billedData, integrate Excel statuses/comments
-                    const previousBilledData = billedData;
-                    billedData = [];
-
-                    data.forEach((row, index) => {
-                        if (row.length >= 6) {
-                            const processDate = formatExcelDate(row[0]);
-                            const userName = String(row[1] || '');
-                            const service = String(row[2] || '');
-                            const connote = String(row[3] || '');
-                            const errorCode = String(row[4] || '');
-                            const batchId = String(row[5] || '');
-                            const excelStatus = row[6] ? String(row[6]).trim() : '';
-                            const excelComment = row[7] ? String(row[7]).trim() : '';
-                            const rowId = `row-${index}`;
-
-                            const previousEntry = previousBilledData.find(item => 
-                                String(item.connote) === connote && 
-                                String(item.userName) === userName && 
-                                String(item.batchId) === batchId
-                            );
-
-                            let status = '';
-                            let comment = excelComment;
-
-                            if (['Emailed', 'Billed', 'Doubtful'].includes(excelStatus)) {
-                                status = excelStatus;
-                                console.log(`Loaded Excel status for connote ${connote}: ${excelStatus}, comment: ${excelComment || 'none'}`);
-                            } else if (previousEntry && ['Emailed', 'Doubtful'].includes(previousEntry.status)) {
-                                status = previousEntry.status.replace('email', 'Emailed').replace('billed', 'Billed').replace('unbilled', 'Doubtful');
-                                comment = previousEntry.comment || excelComment;
-                                console.log(`Preserved status for connote ${connote}: ${status}, comment: ${comment || 'none'}`);
-                            }
-
-                            if (status) {
-                                billedData.push({ 
-                                    processDate, 
-                                    userName, 
-                                    service, 
-                                    connote, 
-                                    errorCode, 
-                                    batchId, 
-                                    status, 
-                                    comment, 
-                                    rowId 
-                                });
-                            }
-                        }
+            try {
+                let arrayBuffer;
+                if (file) {
+                    // Handle manual file upload
+                    const reader = new FileReader();
+                    arrayBuffer = await new Promise((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = () => reject(new Error('Error reading the uploaded file'));
+                        reader.readAsArrayBuffer(file);
                     });
-
-                    // Save updated billedData
-                    saveBilledData();
-
-                    // Populate main table, keep billed table hidden
-                    populateMainTable();
-                    document.getElementById('billedTableContainer').classList.add('hidden');
-                    document.getElementById('billedTableHeader').classList.add('hidden');
-                    document.getElementById('hideBilledTable').classList.add('hidden');
-                    console.log('Billed Items table hidden after load');
-                    loadingMessage.classList.add('hidden');
-                } catch (error) {
-                    console.error('Data loading failed:', error);
-                    errorMessage.textContent = 'Failed to load data. Please check the file format and try again.';
-                    errorMessage.classList.remove('hidden');
-                    loadingMessage.classList.add('hidden');
+                } else {
+                    // Should not reach here in normal flow, but included for completeness
+                    throw new Error('No file provided for manual upload');
                 }
-            };
-            reader.onerror = function() {
-                console.error('File reading error');
-                errorMessage.textContent = 'Error reading the file. Please ensure it is a valid .xlsx file.';
+
+                const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false, raw: true });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+
+                if (data.length > 0) data.shift(); // Remove header row
+
+                // Convert all data to strings to prevent type mismatches
+                data = data.map(row => row.map(String));
+
+                // Save uploaded data to localStorage
+                saveData();
+
+                // Preserve Emailed and Doubtful statuses/comments from previous billedData, integrate Excel statuses/comments
+                const previousBilledData = billedData;
+                billedData = [];
+
+                data.forEach((row, index) => {
+                    if (row.length >= 6) {
+                        const processDate = formatExcelDate(row[0]);
+                        const userName = String(row[1] || '');
+                        const service = String(row[2] || '');
+                        const connote = String(row[3] || '');
+                        const errorCode = String(row[4] || '');
+                        const batchId = String(row[5] || '');
+                        const excelStatus = row[6] ? String(row[6]).trim() : '';
+                        const excelComment = row[7] ? String(row[7]).trim() : '';
+                        const rowId = `row-${index}`;
+
+                        const previousEntry = previousBilledData.find(item => 
+                            String(item.connote) === connote && 
+                            String(item.userName) === userName && 
+                            String(item.batchId) === batchId
+                        );
+
+                        let status = '';
+                        let comment = excelComment;
+
+                        if (['Emailed', 'Billed', 'Doubtful'].includes(excelStatus)) {
+                            status = excelStatus;
+                            console.log(`Loaded Excel status for connote ${connote}: ${excelStatus}, comment: ${excelComment || 'none'}`);
+                        } else if (previousEntry && ['Emailed', 'Doubtful'].includes(previousEntry.status)) {
+                            status = previousEntry.status.replace('email', 'Emailed').replace('billed', 'Billed').replace('unbilled', 'Doubtful');
+                            comment = previousEntry.comment || excelComment;
+                            console.log(`Preserved status for connote ${connote}: ${status}, comment: ${comment || 'none'}`);
+                        }
+
+                        if (status) {
+                            billedData.push({ 
+                                processDate, 
+                                userName, 
+                                service, 
+                                connote, 
+                                errorCode, 
+                                batchId, 
+                                status, 
+                                comment, 
+                                rowId 
+                            });
+                        }
+                    }
+                });
+
+                // Save updated billedData
+                saveBilledData();
+
+                // Populate main table, keep billed table hidden
+                populateMainTable();
+                document.getElementById('billedTableContainer').classList.add('hidden');
+                document.getElementById('billedTableHeader').classList.add('hidden');
+                document.getElementById('hideBilledTable').classList.add('hidden');
+                console.log('Billed Items table hidden after load');
+                loadingMessage.classList.add('hidden');
+            } catch (error) {
+                console.error('Data loading failed:', error);
+                errorMessage.textContent = 'Failed to load data. Please check the file format and try again.';
                 errorMessage.classList.remove('hidden');
                 loadingMessage.classList.add('hidden');
-            };
-            reader.readAsArrayBuffer(file);
+            }
         }
+
+        // Handle file input change and trigger loadData
+        document.getElementById('uploadExcel').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                loadData(file);
+            } else {
+                alert('Please select a file.');
+            }
+        });
 
         // Handle status change
         function handleStatusChange(selectElement, processDate, userName, service, connote, errorCode, batchId, rowId) {
@@ -832,7 +857,7 @@
             }
         }
 
-        // Load saved data on page load
+        // Load saved data or default app.xlsx on page load
         loadSavedData();
     </script>
 </body>
