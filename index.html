@@ -317,6 +317,7 @@
                     const errorCode = String(row[4] || '');
                     const batchId = String(row[5] || '');
                     const excelStatus = row[6] ? String(row[6]).trim() : '';
+                    const excelComment = row[7] ? String(row[7]).trim() : '';
                     const rowId = `row-${index}`;
 
                     uniqueUsers.add(userName);
@@ -328,7 +329,7 @@
                         String(item.batchId) === batchId
                     );
                     const status = previousEntry ? previousEntry.status : (['Emailed', 'Billed', 'Doubtful'].includes(excelStatus) ? excelStatus : '');
-                    const comment = previousEntry ? previousEntry.comment : '';
+                    const comment = previousEntry ? previousEntry.comment : excelComment;
 
                     const statusHtml = status === 'Billed' 
                         ? `<div class="status-container">
@@ -360,7 +361,7 @@
                         <td><input type="text" placeholder="Add comment" value="${comment}" oninput="debounceUpdateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
                     `;
                     tableBody.appendChild(tr);
-                    console.log(`Rendered status for connote ${connote}: ${status || 'blank'} (Excel: ${excelStatus})`);
+                    console.log(`Rendered status for connote ${connote}: ${status || 'blank'} (Excel: ${excelStatus}), comment: ${comment || 'none'} (Excel: ${excelComment || 'none'})`);
                 }
             });
 
@@ -431,7 +432,7 @@
                     // Save uploaded data to localStorage
                     saveData();
 
-                    // Preserve Emailed and Doubtful statuses from previous billedData, integrate Excel statuses
+                    // Preserve Emailed and Doubtful statuses/comments from previous billedData, integrate Excel statuses/comments
                     const previousBilledData = billedData;
                     billedData = [];
 
@@ -444,6 +445,7 @@
                             const errorCode = String(row[4] || '');
                             const batchId = String(row[5] || '');
                             const excelStatus = row[6] ? String(row[6]).trim() : '';
+                            const excelComment = row[7] ? String(row[7]).trim() : '';
                             const rowId = `row-${index}`;
 
                             const previousEntry = previousBilledData.find(item => 
@@ -453,12 +455,15 @@
                             );
 
                             let status = '';
+                            let comment = excelComment;
+
                             if (['Emailed', 'Billed', 'Doubtful'].includes(excelStatus)) {
                                 status = excelStatus;
-                                console.log(`Loaded Excel status for connote ${connote}: ${excelStatus}`);
+                                console.log(`Loaded Excel status for connote ${connote}: ${excelStatus}, comment: ${excelComment || 'none'}`);
                             } else if (previousEntry && ['Emailed', 'Doubtful'].includes(previousEntry.status)) {
                                 status = previousEntry.status.replace('email', 'Emailed').replace('billed', 'Billed').replace('unbilled', 'Doubtful');
-                                console.log(`Preserved status for connote ${connote}: ${status}`);
+                                comment = previousEntry.comment || excelComment;
+                                console.log(`Preserved status for connote ${connote}: ${status}, comment: ${comment || 'none'}`);
                             }
 
                             if (status) {
@@ -470,7 +475,7 @@
                                     errorCode, 
                                     batchId, 
                                     status, 
-                                    comment: previousEntry ? previousEntry.comment : '', 
+                                    comment, 
                                     rowId 
                                 });
                             }
@@ -573,7 +578,7 @@
                 }
                 filterTable();
             });
-            console.log(`Status updated for connote ${connote}: ${status}`);
+            console.log(`Status updated for connote ${connote}: ${status}, comment: ${comment || 'none'}`);
         }
 
         // Debounced comment update
