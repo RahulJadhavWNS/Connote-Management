@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .table-container {
-            max-height: 500px;
+            max-height: 600px;
             overflow-y: auto;
         }
         .table th, .table td {
@@ -153,7 +153,7 @@
             try {
                 const savedData = localStorage.getItem('uploadedData');
                 if (savedData) {
-                    data = JSON.parse(savedData);
+                    data = JSON.parse(savedData).map(row => row.map(String)); // Ensure all values are strings
                     console.log('Loaded uploadedData from localStorage:', data);
                 }
 
@@ -161,10 +161,14 @@
                 if (savedBilledData) {
                     billedData = JSON.parse(savedBilledData).map(item => ({
                         ...item,
-                        id: item.id || Date.now() + Math.random(), // Ensure ID for existing records
                         connote: String(item.connote),
                         userName: String(item.userName),
-                        batchId: String(item.batchId)
+                        batchId: String(item.batchId),
+                        processDate: String(item.processDate),
+                        service: String(item.service),
+                        errorCode: String(item.errorCode),
+                        status: String(item.status || ''),
+                        comment: String(item.comment || '')
                     }));
                     console.log('Loaded billedData from localStorage:', billedData);
                 }
@@ -260,7 +264,7 @@
 
             data.forEach((row, index) => {
                 if (row.length >= 6) {
-                    const processDate = row[0] ? formatExcelDate(row[0]) : '';
+                    const processDate = formatExcelDate(row[0]);
                     const userName = String(row[1] || '');
                     const service = String(row[2] || '');
                     const connote = String(row[3] || '');
@@ -279,6 +283,7 @@
                     const status = previousEntry ? previousEntry.status : '';
                     const comment = previousEntry ? previousEntry.comment : '';
 
+                    // Include all rows in main table except those with 'billed' status
                     if (status === 'billed') return;
 
                     const tr = document.createElement('tr');
@@ -334,7 +339,8 @@
             };
         }
 
-        async function loadData() {
+        // Load Excel file data
+        function loadData() {
             const fileInput = document.getElementById('uploadExcel');
             const errorMessage = document.getElementById('errorMessage');
             const loadingMessage = document.getElementById('loadingMessage');
@@ -349,7 +355,7 @@
             errorMessage.classList.add('hidden');
 
             const reader = new FileReader();
-            reader.onload = async function(e) {
+            reader.onload = function(e) {
                 try {
                     const arrayBuffer = e.target.result;
                     const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false, raw: true });
@@ -357,7 +363,10 @@
                     const worksheet = workbook.Sheets[sheetName];
                     data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
 
-                    if (data.length > 0) data.shift();
+                    if (data.length > 0) data.shift(); // Remove header row
+
+                    // Convert all data to strings to prevent type mismatches
+                    data = data.map(row => row.map(String));
 
                     // Save uploaded data to localStorage
                     saveData();
@@ -368,7 +377,7 @@
 
                     data.forEach((row, index) => {
                         if (row.length >= 6) {
-                            const processDate = row[0] ? formatExcelDate(row[0]) : '';
+                            const processDate = formatExcelDate(row[0]);
                             const userName = String(row[1] || '');
                             const service = String(row[2] || '');
                             const connote = String(row[3] || '');
@@ -383,7 +392,6 @@
                             );
                             if (previousEntry && previousEntry.status) {
                                 billedData.push({ 
-                                    id: previousEntry.id || Date.now() + Math.random(),
                                     processDate, 
                                     userName, 
                                     service, 
@@ -421,6 +429,7 @@
             reader.readAsArrayBuffer(file);
         }
 
+        // Handle status change
         function handleStatusChange(selectElement, processDate, userName, service, connote, errorCode, batchId, rowId) {
             const status = selectElement.value;
             const row = selectElement.closest('tr');
@@ -439,11 +448,9 @@
                 String(item.userName) === String(userName) && 
                 String(item.batchId) === String(batchId)
             );
-            let recordId = existingIndex !== -1 ? billedData[existingIndex].id : Date.now() + Math.random();
 
             if (status) {
                 const record = { 
-                    id: recordId, 
                     processDate, 
                     userName, 
                     service, 
@@ -475,15 +482,16 @@
             });
         }
 
+        // Debounced comment update
         const debounceUpdateComment = debounce((inputElement, rowId) => {
             const comment = inputElement.value;
             const status = inputElement.closest('tr').querySelector('select').value;
             const processDate = inputElement.closest('tr').querySelector('td:nth-child(1)').textContent;
-            const userName = String(inputElement.closest('tr').querySelector('td:nth-child(2)').textContent);
-            const service = String(inputElement.closest('tr').querySelector('td:nth-child(3)').textContent);
-            const connote = String(inputElement.closest('tr').querySelector('td:nth-child(4)').textContent);
-            const errorCode = String(inputElement.closest('tr').querySelector('td:nth-child(5)').textContent);
-            const batchId = String(inputElement.closest('tr').querySelector('td:nth-child(6)').textContent);
+            const userName = inputElement.closest('tr').querySelector('td:nth-child(2)').textContent;
+            const service = inputElement.closest('tr').querySelector('td:nth-child(3)').textContent;
+            const connote = inputElement.closest('tr').querySelector('td:nth-child(4)').textContent;
+            const errorCode = inputElement.closest('tr').querySelector('td:nth-child(5)').textContent;
+            const batchId = inputElement.closest('tr').querySelector('td:nth-child(6)').textContent;
 
             if (!connote || !userName || !batchId) {
                 console.error('Invalid data:', { connote, userName, batchId });
@@ -497,11 +505,9 @@
                 String(item.userName) === userName && 
                 String(item.batchId) === batchId
             );
-            let recordId = existingIndex !== -1 ? billedData[existingIndex].id : Date.now() + Math.random();
 
             if (status) {
                 const record = { 
-                    id: recordId, 
                     processDate, 
                     userName, 
                     service, 
@@ -526,6 +532,7 @@
             }
         }, 300);
 
+        // Update billed items table
         function updateBilledTable() {
             const billedBody = document.getElementById('billedTable').querySelector('tbody');
             billedBody.innerHTML = '';
@@ -546,6 +553,7 @@
             });
         }
 
+        // Filter table based on user and date
         function filterTable() {
             const userFilterValue = document.getElementById('userFilter').value;
             const dateFilterValue = document.getElementById('dateFilter').value;
@@ -559,6 +567,7 @@
             });
         }
 
+        // Show user-wise dashboard
         function showDashboard() {
             const dashboardModal = document.getElementById('dashboardModal');
             const dashboardBody = document.getElementById('dashboardTable').querySelector('tbody');
@@ -591,11 +600,13 @@
             dashboardModal.style.display = 'flex';
         }
 
+        // Close dashboard modal
         function closeDashboard() {
             const dashboardModal = document.getElementById('dashboardModal');
             dashboardModal.style.display = 'none';
         }
 
+        // Export billed data to Excel
         function exportBilledData() {
             const exportMessage = document.getElementById('exportMessage');
             exportMessage.classList.add('hidden');
@@ -656,7 +667,7 @@
                 exportMessage.classList.remove('hidden');
                 setTimeout(() => {
                     exportMessage.classList.add('hidden');
-                    exportMessage.classList.remove('text-green-600');
+                    exportMessage.classList.remove('text-red-600');
                 }, 3000);
             } catch (error) {
                 console.error('Export failed:', error);
