@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -275,28 +236,43 @@
             }
         }
 
-        // Save billedData to IndexedDB
-        async function saveBilledData() {
+        // Save or update a single billedData record to IndexedDB
+        async function saveBilledDataRecord(record) {
             try {
                 const db = await openDB();
                 const tx = db.transaction('billedData', 'readwrite');
                 const store = tx.objectStore('billedData');
+                const request = store.put(record);
 
-                // Clear existing billedData
-                const clearRequest = store.clear();
-                clearRequest.onsuccess = function() {
-                    // Add new billedData
-                    billedData.forEach(item => {
-                        store.add(item);
-                    });
-                    console.log('Saved billedData to IndexedDB:', billedData);
+                request.onsuccess = function() {
+                    console.log('Saved/Updated billedData record in IndexedDB:', record);
                 };
-                clearRequest.onerror = function(event) {
-                    console.error('Failed to clear billedData in IndexedDB:', event.target.error);
+                request.onerror = function(event) {
+                    console.error('Failed to save billedData record to IndexedDB:', event.target.error);
+                    alert('Error saving billed data to IndexedDB. Please try again.');
                 };
             } catch (error) {
-                console.error('Error saving billedData:', error);
+                console.error('Error saving billedData record:', error);
                 alert('Error saving billed data to IndexedDB. Please try again.');
+            }
+        }
+
+        // Delete a billedData record from IndexedDB
+        async function deleteBilledDataRecord(id) {
+            try {
+                const db = await openDB();
+                const tx = db.transaction('billedData', 'readwrite');
+                const store = tx.objectStore('billedData');
+                const request = store.delete(id);
+
+                request.onsuccess = function() {
+                    console.log('Deleted billedData record from IndexedDB:', id);
+                };
+                request.onerror = function(event) {
+                    console.error('Failed to delete billedData record from IndexedDB:', event.target.error);
+                };
+            } catch (error) {
+                console.error('Error deleting billedData record:', error);
             }
         }
 
@@ -378,6 +354,7 @@
                     const status = previousEntry ? previousEntry.status : '';
                     const comment = previousEntry ? previousEntry.comment : '';
 
+                    // Only skip rows with 'billed' status
                     if (status === 'billed') return;
 
                     const tr = document.createElement('tr');
@@ -397,7 +374,7 @@
                                 <option value="unbilled" ${status === 'unbilled' ? 'selected' : ''}>unbilled</option>
                             </select>
                         </td>
-                        <td><input type="text" placeholder="Add comment" value="${comment}" oninput="updateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
+                        <td><input type="text" placeholder="Add comment" value="${comment}" oninput="debounceUpdateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
                     `;
                     tableBody.appendChild(tr);
                 }
@@ -422,6 +399,15 @@
             });
 
             filterTable();
+        }
+
+        // Debounce function to limit frequent updates
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
         }
 
         async function loadData() {
@@ -473,6 +459,7 @@
                             );
                             if (previousEntry && previousEntry.status) {
                                 billedData.push({ 
+                                    id: previousEntry.id, // Preserve existing ID
                                     processDate, 
                                     userName, 
                                     service, 
@@ -488,7 +475,9 @@
                     });
 
                     // Save updated billedData
-                    await saveBilledData();
+                    for (const record of billedData) {
+                        await saveBilledDataRecord(record);
+                    }
 
                     // Populate main table and update UI
                     populateMainTable();
@@ -516,51 +505,41 @@
             const comment = row.querySelector('input').value || '';
 
             const existingIndex = billedData.findIndex(item => item.rowId === rowId);
+            let recordId = existingIndex !== -1 ? billedData[existingIndex].id : undefined;
+
             if (status) {
+                const record = { 
+                    id: recordId, 
+                    processDate, 
+                    userName, 
+                    service, 
+                    connote, 
+                    errorCode, 
+                    batchId, 
+                    status, 
+                    comment, 
+                    rowId 
+                };
                 if (existingIndex === -1) {
-                    billedData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
+                    billedData.push(record);
                 } else {
-                    billedData[existingIndex] = { processDate, userName, service, connote, errorCode, batchId, status, comment, rowId };
+                    billedData[existingIndex] = record;
                 }
-            } else {
-                billedData = billedData.filter(item => item.rowId !== rowId);
+                await saveBilledDataRecord(record);
+            } else if (existingIndex !== -1) {
+                await deleteBilledDataRecord(billedData[existingIndex].id);
+                billedData.splice(existingIndex, 1);
             }
 
             if (status === 'billed') {
                 row.remove();
-            } else if (existingIndex !== -1) {
-                const tableBody = document.getElementById('connoteTable').querySelector('tbody');
-                const existingRow = Array.from(tableBody.querySelectorAll('tr')).find(r => r.dataset.rowId === rowId);
-                if (!existingRow && billedData[existingIndex].status !== 'billed') {
-                    const tr = document.createElement('tr');
-                    tr.dataset.rowId = rowId;
-                    tr.innerHTML = `
-                        <td>${processDate}</td>
-                        <td>${userName}</td>
-                        <td>${service}</td>
-                        <td>${connote}</td>
-                        <td>${errorCode}</td>
-                        <td>${batchId}</td>
-                        <td>
-                            <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
-                                <option value="" ${status === '' ? 'selected' : ''}></option>
-                                <option value="email" ${status === 'email' ? 'selected' : ''}>email</option>
-                                <option value="billed" ${status === 'billed' ? 'selected' : ''}>billed</option>
-                                <option value="unbilled" ${status === 'unbilled' ? 'selected' : ''}>unbilled</option>
-                            </select>
-                        </td>
-                        <td><input type="text" placeholder="Add comment" value="${comment}" oninput="updateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
-                    `;
-                    tableBody.appendChild(tr);
-                }
             }
 
             updateBilledTable();
-            await saveBilledData();
             filterTable();
         }
 
-        async function updateComment(inputElement, rowId) {
+        const debounceUpdateComment = debounce(async (inputElement, rowId) => {
             const comment = inputElement.value;
             const status = inputElement.closest('tr').querySelector('select').value;
             const processDate = inputElement.closest('tr').querySelector('td:nth-child(1)').textContent;
@@ -571,16 +550,30 @@
             const batchId = inputElement.closest('tr').querySelector('td:nth-child(6)').textContent;
 
             const existingIndex = billedData.findIndex(item => item.rowId === rowId);
-            if (existingIndex !== -1) {
-                billedData[existingIndex].comment = comment;
+            let recordId = existingIndex !== -1 ? billedData[existingIndex].id : undefined;
+
+            if (status) {
+                const record = { 
+                    id: recordId, 
+                    processDate, 
+                    userName, 
+                    service, 
+                    connote, 
+                    errorCode, 
+                    batchId, 
+                    status, 
+                    comment, 
+                    rowId 
+                };
+                if (existingIndex === -1) {
+                    billedData.push(record);
+                } else {
+                    billedData[existingIndex] = record;
+                }
+                await saveBilledDataRecord(record);
                 updateBilledTable();
-                await saveBilledData();
-            } else if (status) {
-                billedData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
-                updateBilledTable();
-                await saveBilledData();
             }
-        }
+        }, 300);
 
         function updateBilledTable() {
             const billedBody = document.getElementById('billedTable').querySelector('tbody');
@@ -611,11 +604,7 @@
                 const processDate = row.querySelector('td:nth-child(1)').textContent;
                 const userMatch = userFilterValue === 'All' || userName === userFilterValue;
                 const dateMatch = dateFilterValue === 'All' || processDate === dateFilterValue;
-                if (userMatch && dateMatch) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
+                row.style.display = userMatch && dateMatch ? '' : 'none';
             });
         }
 
