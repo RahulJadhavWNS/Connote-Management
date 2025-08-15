@@ -316,6 +316,7 @@
                     const connote = String(row[3] || '');
                     const errorCode = String(row[4] || '');
                     const batchId = String(row[5] || '');
+                    const excelStatus = row[6] ? String(row[6]).trim() : '';
                     const rowId = `row-${index}`;
 
                     uniqueUsers.add(userName);
@@ -326,7 +327,7 @@
                         String(item.userName) === userName && 
                         String(item.batchId) === batchId
                     );
-                    const status = previousEntry ? previousEntry.status : '';
+                    const status = previousEntry ? previousEntry.status : (['Emailed', 'Billed', 'Doubtful'].includes(excelStatus) ? excelStatus : '');
                     const comment = previousEntry ? previousEntry.comment : '';
 
                     const statusHtml = status === 'Billed' 
@@ -359,7 +360,7 @@
                         <td><input type="text" placeholder="Add comment" value="${comment}" oninput="debounceUpdateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
                     `;
                     tableBody.appendChild(tr);
-                    console.log(`Rendered status for connote ${connote}: ${status || 'blank'}`);
+                    console.log(`Rendered status for connote ${connote}: ${status || 'blank'} (Excel: ${excelStatus})`);
                 }
             });
 
@@ -430,7 +431,7 @@
                     // Save uploaded data to localStorage
                     saveData();
 
-                    // Preserve Emailed and Doubtful statuses from previous billedData
+                    // Preserve Emailed and Doubtful statuses from previous billedData, integrate Excel statuses
                     const previousBilledData = billedData;
                     billedData = [];
 
@@ -442,6 +443,7 @@
                             const connote = String(row[3] || '');
                             const errorCode = String(row[4] || '');
                             const batchId = String(row[5] || '');
+                            const excelStatus = row[6] ? String(row[6]).trim() : '';
                             const rowId = `row-${index}`;
 
                             const previousEntry = previousBilledData.find(item => 
@@ -450,11 +452,16 @@
                                 String(item.batchId) === batchId
                             );
 
-                            if (previousEntry && ['Emailed', 'Doubtful'].includes(previousEntry.status)) {
-                                const mappedStatus = previousEntry.status
-                                    .replace('email', 'Emailed')
-                                    .replace('billed', 'Billed')
-                                    .replace('unbilled', 'Doubtful');
+                            let status = '';
+                            if (['Emailed', 'Billed', 'Doubtful'].includes(excelStatus)) {
+                                status = excelStatus;
+                                console.log(`Loaded Excel status for connote ${connote}: ${excelStatus}`);
+                            } else if (previousEntry && ['Emailed', 'Doubtful'].includes(previousEntry.status)) {
+                                status = previousEntry.status.replace('email', 'Emailed').replace('billed', 'Billed').replace('unbilled', 'Doubtful');
+                                console.log(`Preserved status for connote ${connote}: ${status}`);
+                            }
+
+                            if (status) {
                                 billedData.push({ 
                                     processDate, 
                                     userName, 
@@ -462,11 +469,10 @@
                                     connote, 
                                     errorCode, 
                                     batchId, 
-                                    status: mappedStatus, 
-                                    comment: previousEntry.comment, 
+                                    status, 
+                                    comment: previousEntry ? previousEntry.comment : '', 
                                     rowId 
                                 });
-                                console.log(`Preserved status for connote ${connote}: ${mappedStatus}`);
                             }
                         }
                     });
