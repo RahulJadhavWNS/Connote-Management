@@ -200,7 +200,12 @@
                 // Load billedData
                 const billedRequest = billedStore.getAll();
                 billedRequest.onsuccess = function(event) {
-                    billedData = event.target.result;
+                    billedData = event.target.result.map(item => ({
+                        ...item,
+                        connote: String(item.connote), // Ensure connote is string
+                        userName: String(item.userName),
+                        batchId: String(item.batchId)
+                    }));
                     console.log('Loaded billedData from IndexedDB:', billedData);
                     updateBilledTable();
                     if (data.length > 0) {
@@ -212,6 +217,8 @@
                 };
             } catch (error) {
                 console.error('Error loading saved data:', error);
+                document.getElementById('errorMessage').textContent = 'Error loading saved data. Please try again.';
+                document.getElementById('errorMessage').classList.remove('hidden');
             }
         }
 
@@ -228,37 +235,62 @@
                 };
                 request.onerror = function(event) {
                     console.error('Failed to save uploadedData to IndexedDB:', event.target.error);
-                    alert('Error saving uploaded data to IndexedDB. Please try again.');
+                    document.getElementById('errorMessage').textContent = 'Error saving uploaded data to IndexedDB. Please try again.';
+                    document.getElementById('errorMessage').classList.remove('hidden');
                 };
             } catch (error) {
                 console.error('Error saving uploadedData:', error);
-                alert('Error saving uploaded data to IndexedDB. Please try again.');
+                document.getElementById('errorMessage').textContent = 'Error saving uploaded data to IndexedDB. Please try again.';
+                document.getElementById('errorMessage').classList.remove('hidden');
             }
         }
 
         // Save or update a single billedData record to IndexedDB
         async function saveBilledDataRecord(record) {
             try {
+                // Validate record
+                if (!record.connote || !record.userName || !record.batchId) {
+                    console.error('Invalid record for IndexedDB:', record);
+                    document.getElementById('errorMessage').textContent = 'Invalid data in record. Please ensure all fields are filled.';
+                    document.getElementById('errorMessage').classList.remove('hidden');
+                    return;
+                }
+
                 const db = await openDB();
                 const tx = db.transaction('billedData', 'readwrite');
                 const store = tx.objectStore('billedData');
-                const request = store.put(record);
 
-                request.onsuccess = function() {
-                    console.log('Saved/Updated billedData record in IndexedDB:', record);
+                // Ensure connote, userName, batchId are strings
+                const validatedRecord = {
+                    ...record,
+                    connote: String(record.connote),
+                    userName: String(record.userName),
+                    batchId: String(record.batchId)
+                };
+
+                const request = record.id ? store.put(validatedRecord) : store.add(validatedRecord);
+
+                request.onsuccess = function(event) {
+                    if (!record.id) {
+                        record.id = event.target.result; // Update record with new ID
+                    }
+                    console.log('Saved/Updated billedData record in IndexedDB:', validatedRecord);
                 };
                 request.onerror = function(event) {
-                    console.error('Failed to save billedData record to IndexedDB:', event.target.error);
-                    alert('Error saving billed data to IndexedDB. Please try again.');
+                    console.error('Failed to save billedData record to IndexedDB:', event.target.error, 'Record:', validatedRecord);
+                    document.getElementById('errorMessage').textContent = 'Error saving billed data to IndexedDB. Please try again.';
+                    document.getElementById('errorMessage').classList.remove('hidden');
                 };
             } catch (error) {
-                console.error('Error saving billedData record:', error);
-                alert('Error saving billed data to IndexedDB. Please try again.');
+                console.error('Error saving billedData record:', error, 'Record:', record);
+                document.getElementById('errorMessage').textContent = 'Error saving billed data to IndexedDB. Please try again.';
+                document.getElementById('errorMessage').classList.remove('hidden');
             }
         }
 
         // Delete a billedData record from IndexedDB
         async function deleteBilledDataRecord(id) {
+            if (!id) return;
             try {
                 const db = await openDB();
                 const tx = db.transaction('billedData', 'readwrite');
@@ -299,7 +331,8 @@
                     alert('All saved data cleared successfully.');
                 } catch (error) {
                     console.error('Error clearing saved data:', error);
-                    alert('Error clearing saved data. Please try again.');
+                    document.getElementById('errorMessage').textContent = 'Error clearing saved data. Please try again.';
+                    document.getElementById('errorMessage').classList.remove('hidden');
                 }
             }
         }
@@ -336,20 +369,20 @@
             data.forEach((row, index) => {
                 if (row.length >= 6) {
                     const processDate = row[0] ? formatExcelDate(row[0]) : '';
-                    const userName = row[1] || '';
-                    const service = row[2] || '';
-                    const connote = row[3] || '';
-                    const errorCode = row[4] || '';
-                    const batchId = row[5] || '';
+                    const userName = String(row[1] || '');
+                    const service = String(row[2] || '');
+                    const connote = String(row[3] || '');
+                    const errorCode = String(row[4] || '');
+                    const batchId = String(row[5] || '');
                     const rowId = `row-${index}`;
 
                     uniqueUsers.add(userName);
                     if (processDate) uniqueDates.add(processDate);
 
                     const previousEntry = billedData.find(item => 
-                        item.connote === connote && 
-                        item.userName === userName && 
-                        item.batchId === batchId
+                        String(item.connote) === connote && 
+                        String(item.userName) === userName && 
+                        String(item.batchId) === batchId
                     );
                     const status = previousEntry ? previousEntry.status : '';
                     const comment = previousEntry ? previousEntry.comment : '';
@@ -445,17 +478,17 @@
                     data.forEach((row, index) => {
                         if (row.length >= 6) {
                             const processDate = row[0] ? formatExcelDate(row[0]) : '';
-                            const userName = row[1] || '';
-                            const service = row[2] || '';
-                            const connote = row[3] || '';
-                            const errorCode = row[4] || '';
-                            const batchId = row[5] || '';
+                            const userName = String(row[1] || '');
+                            const service = String(row[2] || '');
+                            const connote = String(row[3] || '');
+                            const errorCode = String(row[4] || '');
+                            const batchId = String(row[5] || '');
                             const rowId = `row-${index}`;
 
                             const previousEntry = previousBilledData.find(item => 
-                                item.connote === connote && 
-                                item.userName === userName && 
-                                item.batchId === batchId
+                                String(item.connote) === connote && 
+                                String(item.userName) === userName && 
+                                String(item.batchId) === batchId
                             );
                             if (previousEntry && previousEntry.status) {
                                 billedData.push({ 
@@ -504,7 +537,11 @@
             const row = selectElement.closest('tr');
             const comment = row.querySelector('input').value || '';
 
-            const existingIndex = billedData.findIndex(item => item.rowId === rowId);
+            const existingIndex = billedData.findIndex(item => 
+                String(item.connote) === String(connote) && 
+                String(item.userName) === String(userName) && 
+                String(item.batchId) === String(batchId)
+            );
             let recordId = existingIndex !== -1 ? billedData[existingIndex].id : undefined;
 
             if (status) {
@@ -531,25 +568,31 @@
                 billedData.splice(existingIndex, 1);
             }
 
-            if (status === 'billed') {
-                row.remove();
-            }
-
-            updateBilledTable();
-            filterTable();
+            // Batch DOM updates
+            requestAnimationFrame(() => {
+                if (status === 'billed') {
+                    row.remove();
+                }
+                updateBilledTable();
+                filterTable();
+            });
         }
 
         const debounceUpdateComment = debounce(async (inputElement, rowId) => {
             const comment = inputElement.value;
             const status = inputElement.closest('tr').querySelector('select').value;
             const processDate = inputElement.closest('tr').querySelector('td:nth-child(1)').textContent;
-            const userName = inputElement.closest('tr').querySelector('td:nth-child(2)').textContent;
-            const service = inputElement.closest('tr').querySelector('td:nth-child(3)').textContent;
-            const connote = inputElement.closest('tr').querySelector('td:nth-child(4)').textContent;
-            const errorCode = inputElement.closest('tr').querySelector('td:nth-child(5)').textContent;
-            const batchId = inputElement.closest('tr').querySelector('td:nth-child(6)').textContent;
+            const userName = String(inputElement.closest('tr').querySelector('td:nth-child(2)').textContent);
+            const service = String(inputElement.closest('tr').querySelector('td:nth-child(3)').textContent);
+            const connote = String(inputElement.closest('tr').querySelector('td:nth-child(4)').textContent);
+            const errorCode = String(inputElement.closest('tr').querySelector('td:nth-child(5)').textContent);
+            const batchId = String(inputElement.closest('tr').querySelector('td:nth-child(6)').textContent);
 
-            const existingIndex = billedData.findIndex(item => item.rowId === rowId);
+            const existingIndex = billedData.findIndex(item => 
+                String(item.connote) === connote && 
+                String(item.userName) === userName && 
+                String(item.batchId) === batchId
+            );
             let recordId = existingIndex !== -1 ? billedData[existingIndex].id : undefined;
 
             if (status) {
@@ -571,7 +614,9 @@
                     billedData[existingIndex] = record;
                 }
                 await saveBilledDataRecord(record);
-                updateBilledTable();
+                requestAnimationFrame(() => {
+                    updateBilledTable();
+                });
             }
         }, 300);
 
