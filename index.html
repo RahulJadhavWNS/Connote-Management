@@ -209,10 +209,12 @@
                         data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
                         if (data.length > 0) data.shift(); // Remove header row
                         data = data.map(row => row.map(String));
-                        console.log('Loaded default app.xlsx:', data);
+                        console.log('Loaded default app.xlsx from repository:', data);
                         saveData();
                     } catch (error) {
                         console.warn('No default app.xlsx found or failed to load:', error);
+                        document.getElementById('errorMessage').textContent = 'No default data found. Please upload an Excel file.';
+                        document.getElementById('errorMessage').classList.remove('hidden');
                     }
                 }
 
@@ -419,7 +421,7 @@
             };
         }
 
-        // Load Excel file data (manual upload or default)
+        // Load Excel file data (manual upload)
         async function loadData(file = null) {
             const errorMessage = document.getElementById('errorMessage');
             const loadingMessage = document.getElementById('loadingMessage');
@@ -438,7 +440,6 @@
                         reader.readAsArrayBuffer(file);
                     });
                 } else {
-                    // Should not reach here in normal flow, but included for completeness
                     throw new Error('No file provided for manual upload');
                 }
 
