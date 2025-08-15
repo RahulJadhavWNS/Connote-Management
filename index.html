@@ -187,38 +187,144 @@
         let uniqueDates = new Set();
         let billedData = [];
 
-        // Load saved billedData from localStorage on page load
-        function loadSavedData() {
-            const savedData = localStorage.getItem('billedData');
-            if (savedData) {
-                try {
-                    billedData = JSON.parse(savedData);
-                    console.log('Loaded billedData from localStorage:', billedData);
-                    updateBilledTable();
-                } catch (error) {
-                    console.error('Failed to parse localStorage data:', error);
-                }
-            }
+        // IndexedDB setup
+        const dbName = 'ConnoteDB';
+        const dbVersion = 1;
+
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(dbName, dbVersion);
+
+                request.onupgradeneeded = function(event) {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('uploadedData')) {
+                        db.createObjectStore('uploadedData', { keyPath: 'id' });
+                    }
+                    if (!db.objectStoreNames.contains('billedData')) {
+                        db.createObjectStore('billedData', { keyPath: 'id', autoIncrement: true });
+                    }
+                };
+
+                request.onsuccess = function(event) {
+                    resolve(event.target.result);
+                };
+
+                request.onerror = function(event) {
+                    reject('Failed to open IndexedDB: ' + event.target.error.message);
+                };
+            });
         }
 
-        // Save billedData to localStorage
-        function saveBilledData() {
+        // Load saved data from IndexedDB
+        async function loadSavedData() {
             try {
-                localStorage.setItem('billedData', JSON.stringify(billedData));
-                console.log('Saved billedData to localStorage:', billedData);
+                const db = await openDB();
+                const tx = db.transaction(['uploadedData', 'billedData'], 'readonly');
+                const uploadedStore = tx.objectStore('uploadedData');
+                const billedStore = tx.objectStore('billedData');
+
+                // Load uploadedData
+                const uploadedRequest = uploadedStore.get('data');
+                uploadedRequest.onsuccess = function(event) {
+                    if (event.target.result) {
+                        data = event.target.result.data;
+                        console.log('Loaded uploadedData from IndexedDB:', data);
+                        populateMainTable();
+                    }
+                };
+                uploadedRequest.onerror = function(event) {
+                    console.error('Failed to load uploadedData from IndexedDB:', event.target.error);
+                };
+
+                // Load billedData
+                const billedRequest = billedStore.getAll();
+                billedRequest.onsuccess = function(event) {
+                    billedData = event.target.result;
+                    console.log('Loaded billedData from IndexedDB:', billedData);
+                    updateBilledTable();
+                    if (data.length > 0) {
+                        populateMainTable();
+                    }
+                };
+                billedRequest.onerror = function(event) {
+                    console.error('Failed to load billedData from IndexedDB:', event.target.error);
+                };
             } catch (error) {
-                console.error('Failed to save billedData to localStorage:', error);
-                alert('Error saving data to localStorage. Storage may be full.');
+                console.error('Error loading saved data:', error);
             }
         }
 
-        // Clear saved data from localStorage
-        function clearSavedData() {
-            if (confirm('Are you sure you want to clear all saved status and comment data? This cannot be undone.')) {
-                localStorage.removeItem('billedData');
-                billedData = [];
-                updateBilledTable();
-                alert('Saved data cleared successfully.');
+        // Save uploadedData to IndexedDB
+        async function saveData() {
+            try {
+                const db = await openDB();
+                const tx = db.transaction('uploadedData', 'readwrite');
+                const store = tx.objectStore('uploadedData');
+                const request = store.put({ id: 'data', data: data });
+
+                request.onsuccess = function() {
+                    console.log('Saved uploadedData to IndexedDB:', data);
+                };
+                request.onerror = function(event) {
+                    console.error('Failed to save uploadedData to IndexedDB:', event.target.error);
+                    alert('Error saving uploaded data to IndexedDB. Please try again.');
+                };
+            } catch (error) {
+                console.error('Error saving uploadedData:', error);
+                alert('Error saving uploaded data to IndexedDB. Please try again.');
+            }
+        }
+
+        // Save billedData to IndexedDB
+        async function saveBilledData() {
+            try {
+                const db = await openDB();
+                const tx = db.transaction('billedData', 'readwrite');
+                const store = tx.objectStore('billedData');
+
+                // Clear existing billedData
+                const clearRequest = store.clear();
+                clearRequest.onsuccess = function() {
+                    // Add new billedData
+                    billedData.forEach(item => {
+                        store.add(item);
+                    });
+                    console.log('Saved billedData to IndexedDB:', billedData);
+                };
+                clearRequest.onerror = function(event) {
+                    console.error('Failed to clear billedData in IndexedDB:', event.target.error);
+                };
+            } catch (error) {
+                console.error('Error saving billedData:', error);
+                alert('Error saving billed data to IndexedDB. Please try again.');
+            }
+        }
+
+        // Clear saved data from IndexedDB
+        async function clearSavedData() {
+            if (confirm('Are you sure you want to clear all saved data (uploaded file and statuses/comments)? This cannot be undone.')) {
+                try {
+                    const db = await openDB();
+                    const tx = db.transaction(['uploadedData', 'billedData'], 'readwrite');
+                    const uploadedStore = tx.objectStore('uploadedData');
+                    const billedStore = tx.objectStore('billedData');
+
+                    uploadedStore.clear();
+                    billedStore.clear();
+
+                    data = [];
+                    billedData = [];
+                    uniqueUsers = new Set();
+                    uniqueDates = new Set();
+                    document.getElementById('connoteTable').querySelector('tbody').innerHTML = '';
+                    document.getElementById('userFilter').innerHTML = '<option value="All">All</option>';
+                    document.getElementById('dateFilter').innerHTML = '<option value="All">All</option>';
+                    updateBilledTable();
+                    alert('All saved data cleared successfully.');
+                } catch (error) {
+                    console.error('Error clearing saved data:', error);
+                    alert('Error clearing saved data. Please try again.');
+                }
             }
         }
 
@@ -244,7 +350,81 @@
             }
         }
 
-        function loadData() {
+        // Populate main table from data
+        function populateMainTable() {
+            uniqueUsers = new Set();
+            uniqueDates = new Set();
+            const tableBody = document.getElementById('connoteTable').querySelector('tbody');
+            tableBody.innerHTML = '';
+
+            data.forEach((row, index) => {
+                if (row.length >= 6) {
+                    const processDate = row[0] ? formatExcelDate(row[0]) : '';
+                    const userName = row[1] || '';
+                    const service = row[2] || '';
+                    const connote = row[3] || '';
+                    const errorCode = row[4] || '';
+                    const batchId = row[5] || '';
+                    const rowId = `row-${index}`;
+
+                    uniqueUsers.add(userName);
+                    if (processDate) uniqueDates.add(processDate);
+
+                    const previousEntry = billedData.find(item => 
+                        item.connote === connote && 
+                        item.userName === userName && 
+                        item.batchId === batchId
+                    );
+                    const status = previousEntry ? previousEntry.status : '';
+                    const comment = previousEntry ? previousEntry.comment : '';
+
+                    if (status === 'billed') return;
+
+                    const tr = document.createElement('tr');
+                    tr.dataset.rowId = rowId;
+                    tr.innerHTML = `
+                        <td>${processDate}</td>
+                        <td>${userName}</td>
+                        <td>${service}</td>
+                        <td>${connote}</td>
+                        <td>${errorCode}</td>
+                        <td>${batchId}</td>
+                        <td>
+                            <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
+                                <option value="" ${status === '' ? 'selected' : ''}></option>
+                                <option value="email" ${status === 'email' ? 'selected' : ''}>email</option>
+                                <option value="billed" ${status === 'billed' ? 'selected' : ''}>billed</option>
+                                <option value="unbilled" ${status === 'unbilled' ? 'selected' : ''}>unbilled</option>
+                            </select>
+                        </td>
+                        <td><input type="text" placeholder="Add comment" value="${comment}" oninput="updateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
+                    `;
+                    tableBody.appendChild(tr);
+                }
+            });
+
+            const userFilter = document.getElementById('userFilter');
+            userFilter.innerHTML = '<option value="All">All</option>';
+            Array.from(uniqueUsers).sort().forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                userFilter.appendChild(option);
+            });
+
+            const dateFilter = document.getElementById('dateFilter');
+            dateFilter.innerHTML = '<option value="All">All</option>';
+            Array.from(uniqueDates).sort().forEach(date => {
+                const option = document.createElement('option');
+                option.value = date;
+                option.textContent = date;
+                dateFilter.appendChild(option);
+            });
+
+            filterTable();
+        }
+
+        async function loadData() {
             const fileInput = document.getElementById('uploadExcel');
             const errorMessage = document.getElementById('errorMessage');
             const loadingMessage = document.getElementById('loadingMessage');
@@ -259,7 +439,7 @@
             errorMessage.classList.add('hidden');
 
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 try {
                     const arrayBuffer = e.target.result;
                     const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false, raw: true });
@@ -269,11 +449,10 @@
 
                     if (data.length > 0) data.shift();
 
-                    uniqueUsers = new Set();
-                    uniqueDates = new Set();
-                    const tableBody = document.getElementById('connoteTable').querySelector('tbody');
-                    tableBody.innerHTML = '';
+                    // Save uploaded data to IndexedDB
+                    await saveData();
 
+                    // Merge with existing billedData
                     const previousBilledData = billedData;
                     billedData = [];
 
@@ -287,67 +466,33 @@
                             const batchId = row[5] || '';
                             const rowId = `row-${index}`;
 
-                            uniqueUsers.add(userName);
-                            if (processDate) uniqueDates.add(processDate);
-
                             const previousEntry = previousBilledData.find(item => 
                                 item.connote === connote && 
                                 item.userName === userName && 
                                 item.batchId === batchId
                             );
-                            const status = previousEntry ? previousEntry.status : '';
-                            const comment = previousEntry ? previousEntry.comment : '';
-
-                            if (status) {
-                                billedData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
+                            if (previousEntry && previousEntry.status) {
+                                billedData.push({ 
+                                    processDate, 
+                                    userName, 
+                                    service, 
+                                    connote, 
+                                    errorCode, 
+                                    batchId, 
+                                    status: previousEntry.status, 
+                                    comment: previousEntry.comment, 
+                                    rowId 
+                                });
                             }
-
-                            if (status === 'billed') return;
-
-                            const tr = document.createElement('tr');
-                            tr.dataset.rowId = rowId;
-                            tr.innerHTML = `
-                                <td>${processDate}</td>
-                                <td>${userName}</td>
-                                <td>${service}</td>
-                                <td>${connote}</td>
-                                <td>${errorCode}</td>
-                                <td>${batchId}</td>
-                                <td>
-                                    <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
-                                        <option value="" ${status === '' ? 'selected' : ''}></option>
-                                        <option value="email" ${status === 'email' ? 'selected' : ''}>email</option>
-                                        <option value="billed" ${status === 'billed' ? 'selected' : ''}>billed</option>
-                                        <option value="unbilled" ${status === 'unbilled' ? 'selected' : ''}>unbilled</option>
-                                    </select>
-                                </td>
-                                <td><input type="text" placeholder="Add comment" value="${comment}" oninput="updateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
-                            `;
-                            tableBody.appendChild(tr);
                         }
                     });
 
-                    const userFilter = document.getElementById('userFilter');
-                    userFilter.innerHTML = '<option value="All">All</option>';
-                    Array.from(uniqueUsers).sort().forEach(user => {
-                        const option = document.createElement('option');
-                        option.value = user;
-                        option.textContent = user;
-                        userFilter.appendChild(option);
-                    });
+                    // Save updated billedData
+                    await saveBilledData();
 
-                    const dateFilter = document.getElementById('dateFilter');
-                    dateFilter.innerHTML = '<option value="All">All</option>';
-                    Array.from(uniqueDates).sort().forEach(date => {
-                        const option = document.createElement('option');
-                        option.value = date;
-                        option.textContent = date;
-                        dateFilter.appendChild(option);
-                    });
-
+                    // Populate main table and update UI
+                    populateMainTable();
                     updateBilledTable();
-                    saveBilledData();
-                    filterTable();
                     loadingMessage.classList.add('hidden');
                 } catch (error) {
                     console.error('Data loading failed:', error);
@@ -365,7 +510,7 @@
             reader.readAsArrayBuffer(file);
         }
 
-        function handleStatusChange(selectElement, processDate, userName, service, connote, errorCode, batchId, rowId) {
+        async function handleStatusChange(selectElement, processDate, userName, service, connote, errorCode, batchId, rowId) {
             const status = selectElement.value;
             const row = selectElement.closest('tr');
             const comment = row.querySelector('input').value || '';
@@ -411,11 +556,11 @@
             }
 
             updateBilledTable();
-            saveBilledData();
+            await saveBilledData();
             filterTable();
         }
 
-        function updateComment(inputElement, rowId) {
+        async function updateComment(inputElement, rowId) {
             const comment = inputElement.value;
             const status = inputElement.closest('tr').querySelector('select').value;
             const processDate = inputElement.closest('tr').querySelector('td:nth-child(1)').textContent;
@@ -429,11 +574,11 @@
             if (existingIndex !== -1) {
                 billedData[existingIndex].comment = comment;
                 updateBilledTable();
-                saveBilledData();
+                await saveBilledData();
             } else if (status) {
                 billedData.push({ processDate, userName, service, connote, errorCode, batchId, status, comment, rowId });
                 updateBilledTable();
-                saveBilledData();
+                await saveBilledData();
             }
         }
 
