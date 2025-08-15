@@ -150,7 +150,7 @@
 
         // IndexedDB setup
         const dbName = 'ConnoteDB';
-        const dbVersion = 1;
+        const dbVersion = 2; // Incremented version for index creation
 
         function openDB() {
             return new Promise((resolve, reject) => {
@@ -161,8 +161,15 @@
                     if (!db.objectStoreNames.contains('uploadedData')) {
                         db.createObjectStore('uploadedData', { keyPath: 'id' });
                     }
+                    let billedStore;
                     if (!db.objectStoreNames.contains('billedData')) {
-                        db.createObjectStore('billedData', { keyPath: 'id', autoIncrement: true });
+                        billedStore = db.createObjectStore('billedData', { keyPath: 'id', autoIncrement: true });
+                    } else {
+                        billedStore = event.target.transaction.objectStore('billedData');
+                    }
+                    // Create index for faster lookups
+                    if (!billedStore.indexNames.contains('connote_user_batch')) {
+                        billedStore.createIndex('connote_user_batch', ['connote', 'userName', 'batchId'], { unique: true });
                     }
                 };
 
@@ -202,7 +209,7 @@
                 billedRequest.onsuccess = function(event) {
                     billedData = event.target.result.map(item => ({
                         ...item,
-                        connote: String(item.connote), // Ensure connote is string
+                        connote: String(item.connote),
                         userName: String(item.userName),
                         batchId: String(item.batchId)
                     }));
@@ -245,46 +252,82 @@
             }
         }
 
-        // Save or update a single billedData record to IndexedDB
-        async function saveBilledDataRecord(record) {
+        // Save or update a single billedData record to IndexedDB with retry
+        async function saveBilledDataRecord(record, retryCount = 0) {
+            const maxRetries = 3;
             try {
                 // Validate record
                 if (!record.connote || !record.userName || !record.batchId) {
                     console.error('Invalid record for IndexedDB:', record);
-                    document.getElementById('errorMessage').textContent = 'Invalid data in record. Please ensure all fields are filled.';
+                    document.getElementById('errorMessage').textContent = 'Invalid data in record. Please ensure Connote, User Name, and Batch Id are filled.';
                     document.getElementById('errorMessage').classList.remove('hidden');
-                    return;
+                    return false;
                 }
 
                 const db = await openDB();
                 const tx = db.transaction('billedData', 'readwrite');
                 const store = tx.objectStore('billedData');
+                const index = store.index('connote_user_batch');
 
-                // Ensure connote, userName, batchId are strings
-                const validatedRecord = {
-                    ...record,
-                    connote: String(record.connote),
-                    userName: String(record.userName),
-                    batchId: String(record.batchId)
-                };
+                // Check for existing record
+                const key = [String(record.connote), String(record.userName), String(record.batchId)];
+                const existingRequest = index.get(key);
 
-                const request = record.id ? store.put(validatedRecord) : store.add(validatedRecord);
+                return await new Promise((resolve, reject) => {
+                    existingRequest.onsuccess = async function(event) {
+                        const validatedRecord = {
+                            ...record,
+                            connote: String(record.connote),
+                            userName: String(record.userName),
+                            batchId: String(record.batchId)
+                        };
+                        let request;
 
-                request.onsuccess = function(event) {
-                    if (!record.id) {
-                        record.id = event.target.result; // Update record with new ID
-                    }
-                    console.log('Saved/Updated billedData record in IndexedDB:', validatedRecord);
-                };
-                request.onerror = function(event) {
-                    console.error('Failed to save billedData record to IndexedDB:', event.target.error, 'Record:', validatedRecord);
-                    document.getElementById('errorMessage').textContent = 'Error saving billed data to IndexedDB. Please try again.';
-                    document.getElementById('errorMessage').classList.remove('hidden');
-                };
+                        if (event.target.result) {
+                            validatedRecord.id = event.target.result.id;
+                            request = store.put(validatedRecord);
+                        } else {
+                            request = store.add(validatedRecord);
+                        }
+
+                        request.onsuccess = function(event) {
+                            if (!record.id) {
+                                record.id = event.target.result;
+                            }
+                            console.log('Saved/Updated billedData record in IndexedDB:', validatedRecord);
+                            resolve(true);
+                        };
+
+                        request.onerror = function(event) {
+                            console.error('Failed to save billedData record to IndexedDB:', event.target.error, 'Record:', validatedRecord);
+                            if (retryCount < maxRetries) {
+                                console.log(`Retrying saveBilledDataRecord (${retryCount + 1}/${maxRetries})...`);
+                                setTimeout(() => saveBilledDataRecord(record, retryCount + 1).then(resolve).catch(reject), 500);
+                            } else {
+                                document.getElementById('errorMessage').textContent = `Error saving billed data to IndexedDB: ${event.target.error.message}. Please try again.`;
+                                document.getElementById('errorMessage').classList.remove('hidden');
+                                reject(event.target.error);
+                            }
+                        };
+                    };
+
+                    existingRequest.onerror = function(event) {
+                        console.error('Failed to check existing record:', event.target.error);
+                        reject(event.target.error);
+                    };
+                });
             } catch (error) {
                 console.error('Error saving billedData record:', error, 'Record:', record);
-                document.getElementById('errorMessage').textContent = 'Error saving billed data to IndexedDB. Please try again.';
-                document.getElementById('errorMessage').classList.remove('hidden');
+                if (retryCount < maxRetries) {
+                    console.log(`Retrying saveBilledDataRecord (${retryCount + 1}/${maxRetries})...`);
+                    return await new Promise(resolve => {
+                        setTimeout(() => saveBilledDataRecord(record, retryCount + 1).then(resolve), 500);
+                    });
+                } else {
+                    document.getElementById('errorMessage').textContent = `Error saving billed data to IndexedDB: ${error.message}. Please try again.`;
+                    document.getElementById('errorMessage').classList.remove('hidden');
+                    return false;
+                }
             }
         }
 
@@ -387,7 +430,6 @@
                     const status = previousEntry ? previousEntry.status : '';
                     const comment = previousEntry ? previousEntry.comment : '';
 
-                    // Only skip rows with 'billed' status
                     if (status === 'billed') return;
 
                     const tr = document.createElement('tr');
@@ -492,7 +534,7 @@
                             );
                             if (previousEntry && previousEntry.status) {
                                 billedData.push({ 
-                                    id: previousEntry.id, // Preserve existing ID
+                                    id: previousEntry.id,
                                     processDate, 
                                     userName, 
                                     service, 
@@ -562,13 +604,13 @@
                 } else {
                     billedData[existingIndex] = record;
                 }
-                await saveBilledDataRecord(record);
+                const success = await saveBilledDataRecord(record);
+                if (!success) return; // Stop if save fails
             } else if (existingIndex !== -1) {
                 await deleteBilledDataRecord(billedData[existingIndex].id);
                 billedData.splice(existingIndex, 1);
             }
 
-            // Batch DOM updates
             requestAnimationFrame(() => {
                 if (status === 'billed') {
                     row.remove();
@@ -613,10 +655,12 @@
                 } else {
                     billedData[existingIndex] = record;
                 }
-                await saveBilledDataRecord(record);
-                requestAnimationFrame(() => {
-                    updateBilledTable();
-                });
+                const success = await saveBilledDataRecord(record);
+                if (success) {
+                    requestAnimationFrame(() => {
+                        updateBilledTable();
+                    });
+                }
             }
         }, 300);
 
