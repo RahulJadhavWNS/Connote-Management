@@ -8,12 +8,25 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .table-container {
-            max-height: 600px;
-            overflow-y: auto;
+            max-height: 800px; /* Increased for better visibility */
+            overflow-y: auto; /* Ensure scrollbar appears */
+            width: 100%; /* Ensure full width */
+            position: relative; /* Ensure container is scrollable */
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
         }
         .table th, .table td {
             padding: 12px;
             text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .table thead {
+            position: sticky;
+            top: 0;
+            background-color: #e5e7eb;
+            z-index: 10;
         }
         .table tbody tr:nth-child(even) {
             background-color: #f9fafb;
@@ -261,6 +274,7 @@
             uniqueDates = new Set();
             const tableBody = document.getElementById('connoteTable').querySelector('tbody');
             tableBody.innerHTML = '';
+            console.log('Populating main table with', data.length, 'rows');
 
             data.forEach((row, index) => {
                 if (row.length >= 6) {
@@ -282,9 +296,6 @@
                     );
                     const status = previousEntry ? previousEntry.status : '';
                     const comment = previousEntry ? previousEntry.comment : '';
-
-                    // Include all rows in main table except those with 'billed' status
-                    if (status === 'billed') return;
 
                     const tr = document.createElement('tr');
                     tr.dataset.rowId = rowId;
@@ -308,6 +319,8 @@
                     tableBody.appendChild(tr);
                 }
             });
+
+            console.log('Main table populated with', tableBody.children.length, 'rows');
 
             const userFilter = document.getElementById('userFilter');
             userFilter.innerHTML = '<option value="All">All</option>';
@@ -474,9 +487,6 @@
             }
 
             requestAnimationFrame(() => {
-                if (status === 'billed') {
-                    row.remove();
-                }
                 updateBilledTable();
                 filterTable();
             });
