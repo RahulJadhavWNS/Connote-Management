@@ -73,6 +73,15 @@
         .hidden {
             display: none !important;
         }
+        .status-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-text {
+            font-weight: 500;
+            color: #374151;
+        }
     </style>
 </head>
 <body class="bg-gray-100 font-sans">
@@ -318,8 +327,24 @@
                         String(item.batchId) === batchId
                     );
                     const status = previousEntry ? previousEntry.status : '';
-
                     const comment = previousEntry ? previousEntry.comment : '';
+
+                    const statusHtml = status === 'Billed' 
+                        ? `<div class="status-container">
+                             <span class="status-text">${status}</span>
+                             <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1">
+                                 <option value=""></option>
+                                 <option value="Emailed">Emailed</option>
+                                 <option value="Billed" selected>Billed</option>
+                                 <option value="Doubtful">Doubtful</option>
+                             </select>
+                           </div>`
+                        : `<select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
+                             <option value="" ${status === '' ? 'selected' : ''}></option>
+                             <option value="Emailed" ${status === 'Emailed' ? 'selected' : ''}>Emailed</option>
+                             <option value="Billed" ${status === 'Billed' ? 'selected' : ''}>Billed</option>
+                             <option value="Doubtful" ${status === 'Doubtful' ? 'selected' : ''}>Doubtful</option>
+                           </select>`;
 
                     const tr = document.createElement('tr');
                     tr.dataset.rowId = rowId;
@@ -330,23 +355,38 @@
                         <td>${connote}</td>
                         <td>${errorCode}</td>
                         <td>${batchId}</td>
-                        <td>
-                            <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
-                                <option value="" ${status === '' ? 'selected' : ''}></option>
-                                <option value="Emailed" ${status === 'Emailed' ? 'selected' : ''}>Emailed</option>
-                                <option value="Billed" ${status === 'Billed' ? 'selected' : ''}>Billed</option>
-                                <option value="Doubtful" ${status === 'Doubtful' ? 'selected' : ''}>Doubtful</option>
-                            </select>
-                        </td>
+                        <td>${statusHtml}</td>
                         <td><input type="text" placeholder="Add comment" value="${comment}" oninput="debounceUpdateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
                     `;
                     tableBody.appendChild(tr);
+                    console.log(`Rendered status for connote ${connote}: ${status || 'blank'}`);
                 }
             });
 
             console.log('Main table populated with', tableBody.children.length, 'rows');
             const mainTableContainer = document.querySelector('.main-table-container');
             console.log('Main table container height:', mainTableContainer.offsetHeight, 'px');
+
+            // Update filters
+            const userFilter = document.getElementById('userFilter');
+            userFilter.innerHTML = '<option value="All">All</option>';
+            Array.from(uniqueUsers).sort().forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                userFilter.appendChild(option);
+            });
+
+            const dateFilter = document.getElementById('dateFilter');
+            dateFilter.innerHTML = '<option value="All">All</option>';
+            Array.from(uniqueDates).sort().forEach(date => {
+                const option = document.createElement('option');
+                option.value = date;
+                option.textContent = date;
+                dateFilter.appendChild(option);
+            });
+
+            filterTable();
         }
 
         // Debounce function to limit frequent updates
@@ -390,7 +430,7 @@
                     // Save uploaded data to localStorage
                     saveData();
 
-                    // Merge with existing billedData
+                    // Preserve Emailed and Doubtful statuses from previous billedData
                     const previousBilledData = billedData;
                     billedData = [];
 
@@ -409,7 +449,8 @@
                                 String(item.userName) === userName && 
                                 String(item.batchId) === batchId
                             );
-                            if (previousEntry && previousEntry.status) {
+
+                            if (previousEntry && ['Emailed', 'Doubtful'].includes(previousEntry.status)) {
                                 const mappedStatus = previousEntry.status
                                     .replace('email', 'Emailed')
                                     .replace('billed', 'Billed')
@@ -425,6 +466,7 @@
                                     comment: previousEntry.comment, 
                                     rowId 
                                 });
+                                console.log(`Preserved status for connote ${connote}: ${mappedStatus}`);
                             }
                         }
                     });
@@ -499,6 +541,26 @@
                 saveBilledData();
             }
 
+            // Update the row's status display
+            const statusCell = row.querySelector('td:nth-child(7)');
+            const statusHtml = status === 'Billed' 
+                ? `<div class="status-container">
+                     <span class="status-text">${status}</span>
+                     <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1">
+                         <option value=""></option>
+                         <option value="Emailed">Emailed</option>
+                         <option value="Billed" selected>Billed</option>
+                         <option value="Doubtful">Doubtful</option>
+                     </select>
+                   </div>`
+                : `<select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
+                     <option value="" ${status === '' ? 'selected' : ''}></option>
+                     <option value="Emailed" ${status === 'Emailed' ? 'selected' : ''}>Emailed</option>
+                     <option value="Billed" ${status === 'Billed' ? 'selected' : ''}>Billed</option>
+                     <option value="Doubtful" ${status === 'Doubtful' ? 'selected' : ''}>Doubtful</option>
+                 </select>`;
+            statusCell.innerHTML = statusHtml;
+
             requestAnimationFrame(() => {
                 if (!document.getElementById('billedTableContainer').classList.contains('hidden')) {
                     updateBilledTable();
@@ -511,7 +573,8 @@
         // Debounced comment update
         const debounceUpdateComment = debounce((inputElement, rowId) => {
             const comment = inputElement.value;
-            const status = inputElement.closest('tr').querySelector('select').value;
+            const statusElement = inputElement.closest('tr').querySelector('select');
+            const status = statusElement ? statusElement.value : inputElement.closest('tr').querySelector('.status-text')?.textContent || '';
             const processDate = inputElement.closest('tr').querySelector('td:nth-child(1)').textContent;
             const userName = inputElement.closest('tr').querySelector('td:nth-child(2)').textContent;
             const service = inputElement.closest('tr').querySelector('td:nth-child(3)').textContent;
