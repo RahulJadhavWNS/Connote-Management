@@ -8,10 +8,11 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .table-container {
-            max-height: 800px; /* Increased for better visibility */
-            overflow-y: auto; /* Ensure scrollbar appears */
-            width: 100%; /* Ensure full width */
-            position: relative; /* Ensure container is scrollable */
+            max-height: 1000px; /* Increased for ~1000 rows */
+            min-height: 400px; /* Ensure visibility for fewer rows */
+            overflow-y: auto !important; /* Force scrollbar */
+            width: 100%;
+            position: relative;
         }
         .table {
             width: 100%;
@@ -58,6 +59,9 @@
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
+        }
+        .hidden {
+            display: none !important; /* Ensure Tailwind hidden works */
         }
     </style>
 </head>
@@ -167,7 +171,7 @@
             try {
                 const savedData = localStorage.getItem('uploadedData');
                 if (savedData) {
-                    data = JSON.parse(savedData).map(row => row.map(String)); // Ensure all values are strings
+                    data = JSON.parse(savedData).map(row => row.map(String));
                     console.log('Loaded uploadedData from localStorage:', data);
                 }
 
@@ -190,7 +194,8 @@
                 if (data.length > 0) {
                     populateMainTable();
                 }
-                updateBilledTable();
+                // Do not call updateBilledTable to keep it hidden
+                console.log('Billed Items table remains hidden on load');
             } catch (error) {
                 console.error('Error loading saved data from localStorage:', error);
                 document.getElementById('errorMessage').textContent = 'Error loading saved data. Please try again.';
@@ -237,10 +242,10 @@
                     document.getElementById('connoteTable').querySelector('tbody').innerHTML = '';
                     document.getElementById('userFilter').innerHTML = '<option value="All">All</option>';
                     document.getElementById('dateFilter').innerHTML = '<option value="All">All</option>';
-                    updateBilledTable();
                     document.getElementById('billedTableContainer').classList.add('hidden');
                     document.getElementById('billedTableHeader').classList.add('hidden');
                     document.getElementById('hideBilledTable').classList.add('hidden');
+                    console.log('Billed Items table hidden after clear');
                     alert('All saved data cleared successfully.');
                 } catch (error) {
                     console.error('Error clearing saved data:', error);
@@ -426,9 +431,12 @@
                     // Save updated billedData
                     saveBilledData();
 
-                    // Populate main table and update UI
+                    // Populate main table, keep billed table hidden
                     populateMainTable();
-                    updateBilledTable();
+                    document.getElementById('billedTableContainer').classList.add('hidden');
+                    document.getElementById('billedTableHeader').classList.add('hidden');
+                    document.getElementById('hideBilledTable').classList.add('hidden');
+                    console.log('Billed Items table hidden after load');
                     loadingMessage.classList.add('hidden');
                 } catch (error) {
                     console.error('Data loading failed:', error);
@@ -491,7 +499,10 @@
             }
 
             requestAnimationFrame(() => {
-                updateBilledTable();
+                // Only update billed table if visible
+                if (!document.getElementById('billedTableContainer').classList.contains('hidden')) {
+                    updateBilledTable();
+                }
                 filterTable();
             });
         }
@@ -538,7 +549,7 @@
                     billedData[existingIndex] = record;
                 }
                 const success = saveBilledData();
-                if (success) {
+                if (success && !document.getElementById('billedTableContainer').classList.contains('hidden')) {
                     requestAnimationFrame(() => {
                         updateBilledTable();
                     });
@@ -565,6 +576,7 @@
                 `;
                 billedBody.appendChild(tr);
             });
+            console.log('Billed Items table updated with', billedBody.children.length, 'rows');
         }
 
         // Filter table based on user and date
@@ -579,6 +591,7 @@
                 const dateMatch = dateFilterValue === 'All' || processDate === dateFilterValue;
                 row.style.display = userMatch && dateMatch ? '' : 'none';
             });
+            console.log('Main table filtered, visible rows:', rows.length);
         }
 
         // Show user-wise dashboard
@@ -643,6 +656,7 @@
             billedTableContainer.classList.remove('hidden');
             billedTableHeader.classList.remove('hidden');
             hideButton.classList.remove('hidden');
+            updateBilledTable();
             console.log('Billed Items table shown');
 
             if (!billedData || billedData.length === 0) {
