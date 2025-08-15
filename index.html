@@ -7,12 +7,22 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .table-container {
-            max-height: 1000px; /* Increased for ~1000 rows */
-            min-height: 400px; /* Ensure visibility for fewer rows */
-            overflow-y: auto !important; /* Force scrollbar */
+        .main-table-container {
+            max-height: 1000px;
+            height: 80vh;
+            min-height: 400px;
+            overflow-y: scroll !important;
             width: 100%;
             position: relative;
+            box-sizing: border-box;
+        }
+        .billed-table-container {
+            max-height: 1000px;
+            min-height: 400px;
+            overflow-y: auto !important;
+            width: 100%;
+            position: relative;
+            box-sizing: border-box;
         }
         .table {
             width: 100%;
@@ -55,13 +65,13 @@
             background-color: white;
             padding: 20px;
             border-radius: 8px;
-            max-width: 600px;
+            max-width: 800px;
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
         }
         .hidden {
-            display: none !important; /* Ensure Tailwind hidden works */
+            display: none !important;
         }
     </style>
 </head>
@@ -91,7 +101,13 @@
             </div>
         </div>
 
-        <div class="table-container bg-white shadow-md rounded-lg overflow-hidden mb-8">
+        <div class="flex space-x-4 mb-6">
+            <button onclick="exportBilledData()" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md">Export Billed Data to Excel</button>
+            <button onclick="showDashboard()" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-md">Show User Dashboard</button>
+            <button onclick="clearSavedData()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md">Clear Saved Data</button>
+        </div>
+
+        <div class="main-table-container bg-white shadow-md rounded-lg overflow-hidden mb-8">
             <table id="connoteTable" class="table w-full">
                 <thead class="bg-gray-200">
                     <tr>
@@ -111,14 +127,7 @@
         </div>
 
         <h2 id="billedTableHeader" class="hidden text-2xl font-semibold text-gray-800 mb-4">Billed Items</h2>
-        <div class="flex space-x-4 mb-4">
-            <button onclick="exportBilledData()" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md">Export Billed Data to Excel</button>
-            <button onclick="showDashboard()" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-md">Show User Dashboard</button>
-            <button onclick="clearSavedData()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md">Clear Saved Data</button>
-            <button id="hideBilledTable" onclick="hideBilledTable()" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md">Hide Billed Items</button>
-        </div>
-        <div id="exportMessage" class="hidden text-green-600 mb-4"></div>
-        <div id="billedTableContainer" class="hidden table-container bg-white shadow-md rounded-lg overflow-hidden">
+        <div id="billedTableContainer" class="hidden billed-table-container bg-white shadow-md rounded-lg overflow-hidden mb-4">
             <table id="billedTable" class="table w-full">
                 <thead class="bg-gray-200">
                     <tr>
@@ -136,19 +145,25 @@
                 </tbody>
             </table>
         </div>
+        <div class="flex space-x-4 mb-4">
+            <button id="hideBilledTable" onclick="hideBilledTable()" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md">Hide Billed Items</button>
+        </div>
+        <div id="exportMessage" class="hidden text-green-600 mb-4"></div>
 
         <!-- Dashboard Modal -->
         <div id="dashboardModal" class="modal">
             <div class="modal-content">
                 <h2 class="text-2xl font-semibold text-gray-800 mb-4">User-Wise Status Dashboard</h2>
-                <div class="table-container">
+                <div class="main-table-container">
                     <table id="dashboardTable" class="table w-full">
                         <thead class="bg-gray-200">
                             <tr>
                                 <th class="text-gray-700 font-semibold">User Name</th>
+                                <th class="text-gray-700 font-semibold">Total Allocated Count</th>
                                 <th class="text-gray-700 font-semibold">Billed Count</th>
-                                <th class="text-gray-700 font-semibold">Unbilled Count</th>
-                                <th class="text-gray-700 font-semibold">Email Count</th>
+                                <th class="text-gray-700 font-semibold">Emailed Count</th>
+                                <th class="text-gray-700 font-semibold">Doubtful Count</th>
+                                <th class="text-gray-700 font-semibold">Completion %</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -185,7 +200,7 @@
                         processDate: String(item.processDate),
                         service: String(item.service),
                         errorCode: String(item.errorCode),
-                        status: String(item.status || ''),
+                        status: String(item.status || '').replace('email', 'Emailed').replace('billed', 'Billed').replace('unbilled', 'Doubtful'),
                         comment: String(item.comment || '')
                     }));
                     console.log('Loaded billedData from localStorage:', billedData);
@@ -194,7 +209,6 @@
                 if (data.length > 0) {
                     populateMainTable();
                 }
-                // Do not call updateBilledTable to keep it hidden
                 console.log('Billed Items table remains hidden on load');
             } catch (error) {
                 console.error('Error loading saved data from localStorage:', error);
@@ -304,6 +318,7 @@
                         String(item.batchId) === batchId
                     );
                     const status = previousEntry ? previousEntry.status : '';
+
                     const comment = previousEntry ? previousEntry.comment : '';
 
                     const tr = document.createElement('tr');
@@ -318,9 +333,9 @@
                         <td>
                             <select onchange="handleStatusChange(this, '${processDate}', '${userName}', '${service}', '${connote}', '${errorCode}', '${batchId}', '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full">
                                 <option value="" ${status === '' ? 'selected' : ''}></option>
-                                <option value="email" ${status === 'email' ? 'selected' : ''}>email</option>
-                                <option value="billed" ${status === 'billed' ? 'selected' : ''}>billed</option>
-                                <option value="unbilled" ${status === 'unbilled' ? 'selected' : ''}>unbilled</option>
+                                <option value="Emailed" ${status === 'Emailed' ? 'selected' : ''}>Emailed</option>
+                                <option value="Billed" ${status === 'Billed' ? 'selected' : ''}>Billed</option>
+                                <option value="Doubtful" ${status === 'Doubtful' ? 'selected' : ''}>Doubtful</option>
                             </select>
                         </td>
                         <td><input type="text" placeholder="Add comment" value="${comment}" oninput="debounceUpdateComment(this, '${rowId}')" class="border border-gray-300 rounded-md p-1 w-full"></td>
@@ -330,26 +345,8 @@
             });
 
             console.log('Main table populated with', tableBody.children.length, 'rows');
-
-            const userFilter = document.getElementById('userFilter');
-            userFilter.innerHTML = '<option value="All">All</option>';
-            Array.from(uniqueUsers).sort().forEach(user => {
-                const option = document.createElement('option');
-                option.value = user;
-                option.textContent = user;
-                userFilter.appendChild(option);
-            });
-
-            const dateFilter = document.getElementById('dateFilter');
-            dateFilter.innerHTML = '<option value="All">All</option>';
-            Array.from(uniqueDates).sort().forEach(date => {
-                const option = document.createElement('option');
-                option.value = date;
-                option.textContent = date;
-                dateFilter.appendChild(option);
-            });
-
-            filterTable();
+            const mainTableContainer = document.querySelector('.main-table-container');
+            console.log('Main table container height:', mainTableContainer.offsetHeight, 'px');
         }
 
         // Debounce function to limit frequent updates
@@ -413,6 +410,10 @@
                                 String(item.batchId) === batchId
                             );
                             if (previousEntry && previousEntry.status) {
+                                const mappedStatus = previousEntry.status
+                                    .replace('email', 'Emailed')
+                                    .replace('billed', 'Billed')
+                                    .replace('unbilled', 'Doubtful');
                                 billedData.push({ 
                                     processDate, 
                                     userName, 
@@ -420,7 +421,7 @@
                                     connote, 
                                     errorCode, 
                                     batchId, 
-                                    status: previousEntry.status, 
+                                    status: mappedStatus, 
                                     comment: previousEntry.comment, 
                                     rowId 
                                 });
@@ -499,12 +500,12 @@
             }
 
             requestAnimationFrame(() => {
-                // Only update billed table if visible
                 if (!document.getElementById('billedTableContainer').classList.contains('hidden')) {
                     updateBilledTable();
                 }
                 filterTable();
             });
+            console.log(`Status updated for connote ${connote}: ${status}`);
         }
 
         // Debounced comment update
@@ -602,28 +603,56 @@
 
             const userCounts = {};
             Array.from(uniqueUsers).sort().forEach(user => {
-                userCounts[user] = { billed: 0, unbilled: 0, email: 0 };
+                userCounts[user] = { 
+                    totalAllocated: 0, 
+                    billed: 0, 
+                    emailed: 0, 
+                    doubtful: 0, 
+                    completion: 0 
+                };
             });
 
+            // Count total allocated rows per user from data
+            data.forEach(row => {
+                if (row.length >= 6) {
+                    const userName = String(row[1] || '');
+                    if (userName && userCounts[userName]) {
+                        userCounts[userName].totalAllocated++;
+                    }
+                }
+            });
+
+            // Count status rows from billedData
             billedData.forEach(item => {
                 if (item.userName && userCounts[item.userName]) {
-                    if (item.status === 'billed') userCounts[item.userName].billed++;
-                    else if (item.status === 'unbilled') userCounts[item.userName].unbilled++;
-                    else if (item.status === 'email') userCounts[item.userName].email++;
+                    if (item.status === 'Billed') userCounts[item.userName].billed++;
+                    else if (item.status === 'Emailed') userCounts[item.userName].emailed++;
+                    else if (item.status === 'Doubtful') userCounts[item.userName].doubtful++;
                 }
+            });
+
+            // Calculate completion percentage
+            Object.keys(userCounts).forEach(user => {
+                const totalProcessed = userCounts[user].billed + userCounts[user].emailed + userCounts[user].doubtful;
+                userCounts[user].completion = userCounts[user].totalAllocated > 0 
+                    ? ((totalProcessed / userCounts[user].totalAllocated) * 100).toFixed(2) 
+                    : 0;
             });
 
             Object.keys(userCounts).forEach(user => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${user}</td>
+                    <td>${userCounts[user].totalAllocated}</td>
                     <td>${userCounts[user].billed}</td>
-                    <td>${userCounts[user].unbilled}</td>
-                    <td>${userCounts[user].email}</td>
+                    <td>${userCounts[user].emailed}</td>
+                    <td>${userCounts[user].doubtful}</td>
+                    <td>${userCounts[user].completion}%</td>
                 `;
                 dashboardBody.appendChild(tr);
             });
 
+            console.log('Dashboard populated with user counts:', userCounts);
             dashboardModal.style.display = 'flex';
         }
 
